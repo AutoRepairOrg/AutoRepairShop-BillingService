@@ -1,0 +1,29 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.vscode/settings.json
+*.swp
+
+## Secrets — NUNCA versionar
+.env
+appsettings.*.json
+!appsettings.json
+!appsettings.Development.json
+
+## Coverage
+coverage/
+TestResults/
+
+## Docker
+.dockerignore
+
+## Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# VS Code C# Dev Tools - Auto-generated runners
+.vscodecsdt/Runners/

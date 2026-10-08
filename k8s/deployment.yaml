@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing-service
+  namespace: autorepair
+  labels:
+    app: billing-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: billing-service
+  template:
+    metadata:
+      labels:
+        app: billing-service
+    spec:
+      containers:
+        - name: billing-service
+          image: DOCKERHUB_USERNAME/billing-service:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production"
+            - name: Messaging__UseStub
+              value: "false"
+            - name: MercadoPago__UseStub
+              value: "false"
+            - name: ConnectionStrings__BillingDatabase
+              valueFrom:
+                secretKeyRef:
+                  name: billing-service-secrets
+                  key: db-connection-string
+            - name: MercadoPago__AccessToken
+              valueFrom:
+                secretKeyRef:
+                  name: billing-service-secrets
+                  key: mp-access-token
+            - name: RabbitMQ__Host
+              valueFrom:
+                configMapKeyRef:
+                  name: billing-service-config
+                  key: rabbitmq-host
+            - name: MercadoPago__NotificationUrl
+              valueFrom:
+                configMapKeyRef:
+                  name: billing-service-config
+                  key: mp-notification-url
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: billing-service
+  namespace: autorepair
+spec:
+  selector:
+    app: billing-service
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: billing-service-hpa
+  namespace: autorepair
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: billing-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: billing-service-config
+  namespace: autorepair
+data:
+  rabbitmq-host: "rabbitmq-service"
+  rabbitmq-port: "5672"
+  mp-notification-url: "https://api.autorepair.local/api/payment/webhook"
