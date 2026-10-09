@@ -34,6 +34,7 @@ else
         return factory.CreateConnectionAsync().GetAwaiter().GetResult();
     });
     builder.Services.AddScoped<IEventPublisher, RabbitMqEventPublisher>();
+    builder.Services.AddHostedService<RabbitMqConsumerService>();
 }
 
 // ── Mercado Pago: real ou stub ────────────────────────────────────────────────

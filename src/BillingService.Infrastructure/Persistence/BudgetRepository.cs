@@ -18,6 +18,17 @@ public class BudgetRepository(BillingDbContext db) : IBudgetRepository
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task AddItemAsync(Budget budget, CancellationToken ct = default)
+    {
+        foreach (var item in budget.Items)
+        {
+            var entry = db.Entry(item);
+            entry.State = EntityState.Added;
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task<Budget?> GetByIdAsync(Guid id, CancellationToken ct = default)
         => await db.Budgets
             .Include("_items")
