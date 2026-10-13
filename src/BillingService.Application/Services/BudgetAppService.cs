@@ -29,7 +29,7 @@ public class BudgetAppService(
     {
         var budget = await GetOrThrowAsync(id, ct);
         budget.AddItem(request.Description, request.Price, request.Quantity);
-        await repository.UpdateAsync(budget, ct);
+        await repository.AddItemAsync(budget, ct);
         return MapToResponse(budget);
     }
 

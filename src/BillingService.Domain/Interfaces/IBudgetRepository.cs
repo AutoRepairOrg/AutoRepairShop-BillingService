@@ -8,4 +8,5 @@ public interface IBudgetRepository
     Task UpdateAsync(Budget budget, CancellationToken ct = default);
     Task<Budget?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<Budget?> GetByOsIdAsync(Guid osId, CancellationToken ct = default);
+    Task AddItemAsync(Budget budget, CancellationToken ct = default);
 }
