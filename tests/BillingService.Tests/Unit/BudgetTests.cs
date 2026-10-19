@@ -130,6 +130,30 @@ public class BudgetTests
     }
 
     [Fact]
+    public void Cancel_FromDraft_ShouldSetCancelledWithoutPublishingEvent()
+    {
+        var budget = CreateDraft();
+        budget.AddItem("Serviço", 100m);
+
+        budget.Cancel("OS cancelada pelo cliente");
+
+        budget.Status.Should().Be(BudgetStatus.Cancelled);
+        budget.RejectionReason.Should().Be("OS cancelada pelo cliente");
+        budget.DomainEvents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Cancel_AlreadyCancelled_ShouldBeIdempotent()
+    {
+        var budget = CreateDraft();
+        budget.Cancel("primeiro");
+        budget.Cancel("segundo");
+
+        budget.Status.Should().Be(BudgetStatus.Cancelled);
+        budget.RejectionReason.Should().Be("primeiro");
+    }
+
+    [Fact]
     public void HappyPath_SendApprove_ShouldWork()
     {
         var budget = CreateDraft();

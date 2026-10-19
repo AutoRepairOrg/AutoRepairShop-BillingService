@@ -26,6 +26,64 @@ public class OsCreatedHandler(IBudgetRepository budgetRepository)
     }
 }
 
+/// <summary>
+/// Item diagnosticado na OS, recebido via OsSentForApprovalEvent.
+/// Espelha OsItemPayload do OsService sem acoplar os Domain projects.
+/// </summary>
+public record IncomingOsItem(string ServiceName, decimal Price, int Quantity);
+
+public class OsSentForApprovalHandler(IBudgetRepository budgetRepository)
+{
+    /// <summary>
+    /// Consumido quando OsService envia a OS para aprovação.
+    /// Auto-popula os BudgetItems a partir dos itens diagnosticados na OS,
+    /// eliminando a duplicação manual de cadastro.
+    /// Idempotente: se o Budget já tiver itens, não adiciona novamente.
+    /// </summary>
+    public async Task HandleAsync(Guid osId, IReadOnlyList<IncomingOsItem> items, CancellationToken ct = default)
+    {
+        var budget = await budgetRepository.GetByOsIdAsync(osId, ct)
+            ?? throw new KeyNotFoundException($"Orçamento para OS {osId} não encontrado ao processar OsSentForApproval.");
+
+        if (budget.Items.Count > 0)
+            return;
+
+        if (items is null || items.Count == 0)
+            throw new InvalidOperationException($"OsSentForApproval da OS {osId} chegou sem itens.");
+
+        foreach (var item in items)
+            budget.AddItem(item.ServiceName, item.Price, item.Quantity);
+
+        await budgetRepository.AddItemAsync(budget, ct);
+    }
+}
+
+public class OsCancelledHandler(
+    IBudgetRepository budgetRepository,
+    IPaymentRepository paymentRepository)
+{
+    /// <summary>
+    /// Compensação do Saga: OS cancelada → cancela Budget e Payment pendentes.
+    /// Não republica BudgetRejectedEvent para evitar loop com o OsService.
+    /// </summary>
+    public async Task HandleAsync(Guid osId, string reason, CancellationToken ct = default)
+    {
+        var budget = await budgetRepository.GetByOsIdAsync(osId, ct);
+        if (budget is not null)
+        {
+            budget.Cancel($"OS cancelada: {reason}");
+            await budgetRepository.UpdateAsync(budget, ct);
+        }
+
+        var payment = await paymentRepository.GetByOsIdAsync(osId, ct);
+        if (payment is { Status: PaymentStatus.Pending })
+        {
+            payment.Fail($"OS cancelada: {reason}");
+            await paymentRepository.UpdateAsync(payment, ct);
+        }
+    }
+}
+
 public class ExecutionCompletedHandler(
     IBudgetRepository budgetRepository,
     IPaymentRepository paymentRepository,
@@ -34,6 +92,7 @@ public class ExecutionCompletedHandler(
     /// <summary>
     /// Consumido quando ExecutionService conclui o serviço.
     /// Inicia checkout Mercado Pago e cria Payment Pending.
+    /// Idempotente: se já existe Payment Pending ou Confirmed, não recria.
     /// </summary>
     public async Task HandleAsync(Guid osId, CancellationToken ct = default)
     {

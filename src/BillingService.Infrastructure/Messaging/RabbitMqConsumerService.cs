@@ -10,16 +10,23 @@ using RabbitMQ.Client.Events;
 namespace BillingService.Infrastructure.Messaging;
 
 /// <summary>
-/// Consome eventos do OsService (Saga coreografada).
-/// Exchange: os-service-events → Queue: billing-service-os-events
+/// Consome eventos dos demais serviços (Saga coreografada).
+///
+/// Exchanges / filas:
+///   os-service-events          → billing-service-os-events
+///     OsCreatedEvent, OsSentForApprovalEvent, OsCancelledEvent
+///   execution-service-events   → billing-service-execution-events
+///     ExecutionCompletedEvent
 /// </summary>
 public class RabbitMqConsumerService(
     IConnection connection,
     IServiceScopeFactory scopeFactory,
     ILogger<RabbitMqConsumerService> logger) : BackgroundService
 {
-    private const string ExchangeName = "os-service-events";
-    private const string QueueName = "billing-service-os-events";
+    private const string OsExchange   = "os-service-events";
+    private const string OsQueue      = "billing-service-os-events";
+    private const string ExecExchange = "execution-service-events";
+    private const string ExecQueue    = "billing-service-execution-events";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -32,37 +39,27 @@ public class RabbitMqConsumerService(
     {
         _channel = await connection.CreateChannelAsync(cancellationToken: stoppingToken);
 
-        await _channel.ExchangeDeclareAsync(
-            exchange: ExchangeName,
-            type: ExchangeType.Topic,
-            durable: true,
-            autoDelete: false,
-            cancellationToken: stoppingToken);
+        await DeclareAndBindAsync(
+            OsExchange, OsQueue,
+            ["OsCreatedEvent", "OsSentForApprovalEvent", "OsCancelledEvent"],
+            stoppingToken);
 
-        await _channel.QueueDeclareAsync(
-            queue: QueueName,
-            durable: true,
-            exclusive: false,
-            autoDelete: false,
-            cancellationToken: stoppingToken);
-
-        await _channel.QueueBindAsync(QueueName, ExchangeName, "OsCreatedEvent", cancellationToken: stoppingToken);
-        await _channel.QueueBindAsync(QueueName, ExchangeName, "OsCancelledEvent", cancellationToken: stoppingToken);
+        await DeclareAndBindAsync(
+            ExecExchange, ExecQueue,
+            ["ExecutionCompletedEvent"],
+            stoppingToken);
 
         await _channel.BasicQosAsync(0, 1, false, stoppingToken);
 
         var consumer = new AsyncEventingBasicConsumer(_channel);
         consumer.ReceivedAsync += OnReceivedAsync;
 
-        await _channel.BasicConsumeAsync(
-            queue: QueueName,
-            autoAck: false,
-            consumer: consumer,
-            cancellationToken: stoppingToken);
+        await _channel.BasicConsumeAsync(OsQueue,   autoAck: false, consumer: consumer, cancellationToken: stoppingToken);
+        await _channel.BasicConsumeAsync(ExecQueue, autoAck: false, consumer: consumer, cancellationToken: stoppingToken);
 
         logger.LogInformation(
-            "BillingService RabbitMQ consumer iniciado — queue {Queue}, exchange {Exchange}",
-            QueueName, ExchangeName);
+            "BillingService RabbitMQ consumer iniciado — queues {OsQueue}, {ExecQueue}",
+            OsQueue, ExecQueue);
 
         try
         {
@@ -72,6 +69,16 @@ public class RabbitMqConsumerService(
         {
             // shutdown normal
         }
+    }
+
+    private async Task DeclareAndBindAsync(
+        string exchange, string queue, string[] routingKeys, CancellationToken ct)
+    {
+        await _channel!.ExchangeDeclareAsync(exchange, ExchangeType.Topic, durable: true, autoDelete: false, cancellationToken: ct);
+        await _channel.QueueDeclareAsync(queue, durable: true, exclusive: false, autoDelete: false, cancellationToken: ct);
+
+        foreach (var key in routingKeys)
+            await _channel.QueueBindAsync(queue, exchange, key, cancellationToken: ct);
     }
 
     private async Task OnReceivedAsync(object sender, BasicDeliverEventArgs ea)
@@ -94,10 +101,33 @@ public class RabbitMqConsumerService(
                     await handler.HandleAsync(msg.OsId, msg.CustomerName, msg.VehiclePlate);
                     break;
                 }
-                case "OsCancelledEvent":
-                    // Compensação futura — por ora apenas loga
-                    logger.LogInformation("OsCancelledEvent recebido (sem ação): {Body}", body);
+                case "OsSentForApprovalEvent":
+                {
+                    var msg = JsonSerializer.Deserialize<IncomingOsSentForApproval>(body, JsonOptions)
+                        ?? throw new InvalidOperationException("Payload OsSentForApprovalEvent inválido.");
+
+                    var handler = scope.ServiceProvider.GetRequiredService<OsSentForApprovalHandler>();
+                    await handler.HandleAsync(msg.OsId, msg.Items);
                     break;
+                }
+                case "OsCancelledEvent":
+                {
+                    var msg = JsonSerializer.Deserialize<IncomingOsCancelled>(body, JsonOptions)
+                        ?? throw new InvalidOperationException("Payload OsCancelledEvent inválido.");
+
+                    var handler = scope.ServiceProvider.GetRequiredService<OsCancelledHandler>();
+                    await handler.HandleAsync(msg.OsId, msg.Reason);
+                    break;
+                }
+                case "ExecutionCompletedEvent":
+                {
+                    var msg = JsonSerializer.Deserialize<IncomingExecutionCompleted>(body, JsonOptions)
+                        ?? throw new InvalidOperationException("Payload ExecutionCompletedEvent inválido.");
+
+                    var handler = scope.ServiceProvider.GetRequiredService<ExecutionCompletedHandler>();
+                    await handler.HandleAsync(msg.OsId);
+                    break;
+                }
                 default:
                     logger.LogWarning("Routing key ignorada: {RoutingKey}", routingKey);
                     break;
@@ -121,6 +151,10 @@ public class RabbitMqConsumerService(
         await base.StopAsync(cancellationToken);
     }
 
-    // DTO mínimo para deserializar evento publicado pelo OsService (sem acoplar os Domain projects)
+    // DTOs mínimos para deserializar eventos publicados pelos outros serviços
+    // (sem acoplar os Domain projects)
     private sealed record IncomingOsCreated(Guid OsId, string CustomerName, string VehiclePlate);
+    private sealed record IncomingOsSentForApproval(Guid OsId, List<IncomingOsItem> Items);
+    private sealed record IncomingOsCancelled(Guid OsId, string Reason);
+    private sealed record IncomingExecutionCompleted(Guid OsId);
 }

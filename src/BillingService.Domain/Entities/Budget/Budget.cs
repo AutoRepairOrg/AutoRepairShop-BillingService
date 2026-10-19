@@ -93,6 +93,23 @@ public class Budget
         AddDomainEvent(new BudgetRejectedEvent(Id, OsId, reason));
     }
 
+    /// <summary>
+    /// Compensação do Saga: cancela o orçamento quando a OS é cancelada.
+    /// Não publica BudgetRejectedEvent para evitar loop com o OsService.
+    /// Idempotente se já estiver Rejected ou Cancelled.
+    /// </summary>
+    public void Cancel(string reason)
+    {
+        if (Status is BudgetStatus.Rejected or BudgetStatus.Cancelled)
+            return;
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+
+        Status = BudgetStatus.Cancelled;
+        RejectionReason = reason;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     public decimal CalculateTotal() => _items.Sum(i => i.Subtotal);
 
     public void ClearDomainEvents() => _domainEvents.Clear();

@@ -9,7 +9,12 @@ namespace BillingService.Api.Controllers;
 [Produces("application/json")]
 public class PaymentController(PaymentAppService appService) : ControllerBase
 {
-    /// <summary>Inicia checkout Mercado Pago (Checkout Pro) para a OS.</summary>
+    /// <summary>
+    /// [Override manual] Inicia checkout Mercado Pago (Checkout Pro) para a OS.
+    /// No fluxo normal do Saga, o checkout é criado automaticamente pelo
+    /// ExecutionCompletedHandler quando o ExecutionService conclui o serviço.
+    /// Idempotente: retorna o checkout existente se o Payment já estiver Pending.
+    /// </summary>
     [HttpPost("checkout/{osId:guid}")]
     [ProducesResponseType(typeof(CheckoutResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> StartCheckout(Guid osId, CancellationToken ct)
