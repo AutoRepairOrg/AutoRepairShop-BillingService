@@ -41,7 +41,11 @@ public class BudgetController(BudgetAppService appService) : ControllerBase
         }
     }
 
-    /// <summary>Adiciona item ao orçamento (Draft).</summary>
+    /// <summary>
+    /// [Override manual] Adiciona item ao orçamento (Draft).
+    /// No fluxo normal do Saga, os itens vêm automaticamente via OsSentForApprovalEvent
+    /// publicado pelo OsService. Use este endpoint apenas para ajustes pontuais.
+    /// </summary>
     [HttpPost("{id:guid}/items")]
     [ProducesResponseType(typeof(BudgetResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> AddItem(Guid id, [FromBody] AddBudgetItemRequest request, CancellationToken ct)

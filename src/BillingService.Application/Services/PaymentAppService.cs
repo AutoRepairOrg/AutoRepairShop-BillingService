@@ -12,6 +12,12 @@ public class PaymentAppService(
     IMercadoPagoService mercadoPagoService,
     IEventPublisher eventPublisher)
 {
+    /// <summary>
+    /// [Override manual] Inicia checkout Mercado Pago.
+    /// No fluxo do Saga, o checkout é criado pelo ExecutionCompletedHandler.
+    /// Proteção contra duplicatas: se já existe Payment Pending com URL, retorna o existente;
+    /// se já está Confirmed, lança InvalidOperationException.
+    /// </summary>
     public async Task<CheckoutResponse> StartCheckoutAsync(Guid osId, CancellationToken ct = default)
     {
         var existing = await paymentRepository.GetByOsIdAsync(osId, ct);
