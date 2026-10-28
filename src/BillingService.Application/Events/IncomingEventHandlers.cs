@@ -35,21 +35,33 @@ public record IncomingOsItem(string ServiceName, decimal Price, int Quantity);
 public class OsSentForApprovalHandler(IBudgetRepository budgetRepository)
 {
     /// <summary>
-    /// Consumido quando OsService envia a OS para aprovação.
-    /// Auto-popula os BudgetItems a partir dos itens diagnosticados na OS,
-    /// eliminando a duplicação manual de cadastro.
+    /// Consumido quando OsService envia a OS para aprovação, já com itens diagnosticados.
+    /// Cria o Budget (se ainda não existir) e popula os itens. Não depende de OsCreatedEvent.
     /// Idempotente: se o Budget já tiver itens, não adiciona novamente.
     /// </summary>
-    public async Task HandleAsync(Guid osId, IReadOnlyList<IncomingOsItem> items, CancellationToken ct = default)
+    public async Task HandleAsync(
+        Guid osId,
+        string customerName,
+        string vehiclePlate,
+        IReadOnlyList<IncomingOsItem> items,
+        CancellationToken ct = default)
     {
-        var budget = await budgetRepository.GetByOsIdAsync(osId, ct)
-            ?? throw new KeyNotFoundException($"Orçamento para OS {osId} não encontrado ao processar OsSentForApproval.");
+        if (items is null || items.Count == 0)
+            throw new InvalidOperationException($"OsSentForApproval da OS {osId} chegou sem itens.");
+
+        var budget = await budgetRepository.GetByOsIdAsync(osId, ct);
+        if (budget is null)
+        {
+            budget = Budget.Create(osId, customerName, vehiclePlate);
+            foreach (var item in items)
+                budget.AddItem(item.ServiceName, item.Price, item.Quantity);
+
+            await budgetRepository.AddAsync(budget, ct);
+            return;
+        }
 
         if (budget.Items.Count > 0)
             return;
-
-        if (items is null || items.Count == 0)
-            throw new InvalidOperationException($"OsSentForApproval da OS {osId} chegou sem itens.");
 
         foreach (var item in items)
             budget.AddItem(item.ServiceName, item.Price, item.Quantity);

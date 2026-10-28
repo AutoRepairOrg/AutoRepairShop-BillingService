@@ -13,7 +13,3 @@ public record PaymentResponse(
     DateTime? UpdatedAt);
 
 public record CheckoutResponse(Guid PaymentId, string CheckoutUrl);
-
-public record WebhookNotificationRequest(string? Topic, string? Id, string? Action, WebhookData? Data);
-
-public record WebhookData(string? Id);

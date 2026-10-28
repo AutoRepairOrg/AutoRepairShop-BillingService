@@ -63,7 +63,7 @@ public class IncomingEventHandlerTests
         };
 
         var handler = new OsSentForApprovalHandler(repo.Object);
-        await handler.HandleAsync(osId, items);
+        await handler.HandleAsync(osId, "Pedro", "BBB2222", items);
 
         budget.Items.Should().HaveCount(2);
         budget.CalculateTotal().Should().Be(310m);
@@ -81,7 +81,7 @@ public class IncomingEventHandlerTests
         repo.Setup(r => r.GetByOsIdAsync(osId, default)).ReturnsAsync(budget);
 
         var handler = new OsSentForApprovalHandler(repo.Object);
-        await handler.HandleAsync(osId, [new IncomingOsItem("Novo", 50m, 1)]);
+        await handler.HandleAsync(osId, "Pedro", "BBB2222", [new IncomingOsItem("Novo", 50m, 1)]);
 
         budget.Items.Should().HaveCount(1);
         budget.Items.First().Description.Should().Be("Já existente");
@@ -89,15 +89,33 @@ public class IncomingEventHandlerTests
     }
 
     [Fact]
-    public async Task OsSentForApprovalHandler_BudgetNotFound_ShouldThrow()
+    public async Task OsSentForApprovalHandler_WhenBudgetMissing_ShouldCreateBudgetWithItems()
     {
         var repo = new Mock<IBudgetRepository>();
-        repo.Setup(r => r.GetByOsIdAsync(It.IsAny<Guid>(), default)).ReturnsAsync((Budget?)null);
+        var osId = Guid.NewGuid();
+        repo.Setup(r => r.GetByOsIdAsync(osId, default)).ReturnsAsync((Budget?)null);
+        repo.Setup(r => r.AddAsync(It.IsAny<Budget>(), default)).Returns(Task.CompletedTask);
 
         var handler = new OsSentForApprovalHandler(repo.Object);
-        var act = async () => await handler.HandleAsync(Guid.NewGuid(), [new IncomingOsItem("X", 10m, 1)]);
+        await handler.HandleAsync(osId, "Pedro", "BBB2222", [new IncomingOsItem("Troca de óleo", 150m, 1)]);
 
-        await act.Should().ThrowAsync<KeyNotFoundException>();
+        repo.Verify(r => r.AddAsync(It.Is<Budget>(b =>
+            b.OsId == osId &&
+            b.CustomerName == "Pedro" &&
+            b.VehiclePlate == "BBB2222" &&
+            b.Items.Count == 1 &&
+            b.CalculateTotal() == 150m), default), Times.Once);
+    }
+
+    [Fact]
+    public async Task OsSentForApprovalHandler_WithoutItems_ShouldThrow()
+    {
+        var repo = new Mock<IBudgetRepository>();
+        var handler = new OsSentForApprovalHandler(repo.Object);
+
+        var act = async () => await handler.HandleAsync(Guid.NewGuid(), "Pedro", "BBB2222", []);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
     // ── OsCancelledHandler ───────────────────────────────────────────────────

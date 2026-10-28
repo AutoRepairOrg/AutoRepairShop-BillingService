@@ -45,8 +45,7 @@ public class PaymentController(PaymentAppService appService) : ControllerBase
 
     /// <summary>
     /// Webhook Mercado Pago (público).
-    /// Aceita query string (?topic=payment&amp;id=...) e body JSON.
-    /// Docs: https://www.mercadopago.com.br/developers/pt
+    /// Query: topic=payment e id (no stub: approved:{paymentId}).
     /// </summary>
     [HttpPost("webhook")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -54,15 +53,10 @@ public class PaymentController(PaymentAppService appService) : ControllerBase
         [FromQuery] string? topic,
         [FromQuery] string? id,
         [FromQuery(Name = "data.id")] string? dataId,
-        [FromBody] WebhookNotificationRequest? body,
         CancellationToken ct)
     {
-        var mpPaymentId = id
-            ?? dataId
-            ?? body?.Id
-            ?? body?.Data?.Id;
-
-        var notificationTopic = topic ?? body?.Topic ?? body?.Action;
+        var mpPaymentId = id ?? dataId;
+        var notificationTopic = topic;
 
         if (string.IsNullOrWhiteSpace(mpPaymentId))
             return Ok(new { received = true, processed = false, reason = "missing payment id" });

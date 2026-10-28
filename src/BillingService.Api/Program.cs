@@ -53,7 +53,6 @@ builder.Services.AddScoped<IBudgetRepository, BudgetRepository>();
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<BudgetAppService>();
 builder.Services.AddScoped<PaymentAppService>();
-builder.Services.AddScoped<OsCreatedHandler>();
 builder.Services.AddScoped<OsSentForApprovalHandler>();
 builder.Services.AddScoped<OsCancelledHandler>();
 builder.Services.AddScoped<ExecutionCompletedHandler>();

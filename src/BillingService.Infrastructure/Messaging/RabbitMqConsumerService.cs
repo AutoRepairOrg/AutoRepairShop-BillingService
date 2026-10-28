@@ -14,7 +14,7 @@ namespace BillingService.Infrastructure.Messaging;
 ///
 /// Exchanges / filas:
 ///   os-service-events          → billing-service-os-events
-///     OsCreatedEvent, OsSentForApprovalEvent, OsCancelledEvent
+///     OsSentForApprovalEvent, OsCancelledEvent
 ///   execution-service-events   → billing-service-execution-events
 ///     ExecutionCompletedEvent
 /// </summary>
@@ -41,7 +41,7 @@ public class RabbitMqConsumerService(
 
         await DeclareAndBindAsync(
             OsExchange, OsQueue,
-            ["OsCreatedEvent", "OsSentForApprovalEvent", "OsCancelledEvent"],
+            ["OsSentForApprovalEvent", "OsCancelledEvent"],
             stoppingToken);
 
         await DeclareAndBindAsync(
@@ -88,26 +88,17 @@ public class RabbitMqConsumerService(
 
         try
         {
-            using var scope = scopeFactory.CreateScope();
+            await using var scope = scopeFactory.CreateAsyncScope();
 
             switch (routingKey)
             {
-                case "OsCreatedEvent":
-                {
-                    var msg = JsonSerializer.Deserialize<IncomingOsCreated>(body, JsonOptions)
-                        ?? throw new InvalidOperationException("Payload OsCreatedEvent inválido.");
-
-                    var handler = scope.ServiceProvider.GetRequiredService<OsCreatedHandler>();
-                    await handler.HandleAsync(msg.OsId, msg.CustomerName, msg.VehiclePlate);
-                    break;
-                }
                 case "OsSentForApprovalEvent":
                 {
                     var msg = JsonSerializer.Deserialize<IncomingOsSentForApproval>(body, JsonOptions)
                         ?? throw new InvalidOperationException("Payload OsSentForApprovalEvent inválido.");
 
                     var handler = scope.ServiceProvider.GetRequiredService<OsSentForApprovalHandler>();
-                    await handler.HandleAsync(msg.OsId, msg.Items);
+                    await handler.HandleAsync(msg.OsId, msg.CustomerName, msg.VehiclePlate, msg.Items);
                     break;
                 }
                 case "OsCancelledEvent":
@@ -153,8 +144,11 @@ public class RabbitMqConsumerService(
 
     // DTOs mínimos para deserializar eventos publicados pelos outros serviços
     // (sem acoplar os Domain projects)
-    private sealed record IncomingOsCreated(Guid OsId, string CustomerName, string VehiclePlate);
-    private sealed record IncomingOsSentForApproval(Guid OsId, List<IncomingOsItem> Items);
+    private sealed record IncomingOsSentForApproval(
+        Guid OsId,
+        string CustomerName,
+        string VehiclePlate,
+        List<IncomingOsItem> Items);
     private sealed record IncomingOsCancelled(Guid OsId, string Reason);
     private sealed record IncomingExecutionCompleted(Guid OsId);
 }

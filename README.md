@@ -54,7 +54,8 @@ Pending → Confirmed
 
 | Evento | Origem | Ação |
 |---|---|---|
-| `OsCreated` | OsService | Cria Budget em Draft |
+| `OsSentForApproval` | OsService | Cria o Budget e popula os itens diagnosticados |
+| `OsCancelled` | OsService | Cancela Budget e Payment pendentes |
 | `ExecutionCompleted` | ExecutionService | Inicia checkout MP + cria Payment |
 
 ## Integração Mercado Pago (Checkout Pro)
