@@ -9,23 +9,6 @@ namespace BillingService.Application.Events;
 /// <summary>
 /// Handlers para eventos consumidos do broker (Saga coreografada).
 /// </summary>
-public class OsCreatedHandler(IBudgetRepository budgetRepository)
-{
-    /// <summary>
-    /// Consumido quando OsService cria uma OS.
-    /// Cria orçamento em Draft para a OS.
-    /// </summary>
-    public async Task HandleAsync(Guid osId, string customerName, string vehiclePlate, CancellationToken ct = default)
-    {
-        var existing = await budgetRepository.GetByOsIdAsync(osId, ct);
-        if (existing is not null)
-            return;
-
-        var budget = Budget.Create(osId, customerName, vehiclePlate);
-        await budgetRepository.AddAsync(budget, ct);
-    }
-}
-
 /// <summary>
 /// Item diagnosticado na OS, recebido via OsSentForApprovalEvent.
 /// Espelha OsItemPayload do OsService sem acoplar os Domain projects.

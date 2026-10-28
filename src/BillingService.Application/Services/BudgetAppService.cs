@@ -25,14 +25,6 @@ public class BudgetAppService(
         return MapToResponse(budget);
     }
 
-    public async Task<BudgetResponse> AddItemAsync(Guid id, AddBudgetItemRequest request, CancellationToken ct = default)
-    {
-        var budget = await GetOrThrowAsync(id, ct);
-        budget.AddItem(request.Description, request.Price, request.Quantity);
-        await repository.AddItemAsync(budget, ct);
-        return MapToResponse(budget);
-    }
-
     public async Task<BudgetResponse> SendAsync(Guid id, CancellationToken ct = default)
     {
         var budget = await GetOrThrowAsync(id, ct);

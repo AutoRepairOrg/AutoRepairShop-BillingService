@@ -11,39 +11,6 @@ namespace BillingService.Tests.Unit;
 
 public class IncomingEventHandlerTests
 {
-    [Fact]
-    public async Task OsCreatedHandler_ShouldCreateDraftBudget()
-    {
-        var repo = new Mock<IBudgetRepository>();
-        var osId = Guid.NewGuid();
-
-        repo.Setup(r => r.GetByOsIdAsync(osId, default)).ReturnsAsync((Budget?)null);
-        repo.Setup(r => r.AddAsync(It.IsAny<Budget>(), default)).Returns(Task.CompletedTask);
-
-        var handler = new OsCreatedHandler(repo.Object);
-        await handler.HandleAsync(osId, "Pedro", "BBB2222");
-
-        repo.Verify(r => r.AddAsync(It.Is<Budget>(b =>
-            b.OsId == osId &&
-            b.Status == BudgetStatus.Draft &&
-            b.CustomerName == "Pedro"), default), Times.Once);
-    }
-
-    [Fact]
-    public async Task OsCreatedHandler_WhenBudgetExists_ShouldBeIdempotent()
-    {
-        var repo = new Mock<IBudgetRepository>();
-        var osId = Guid.NewGuid();
-        var existing = Budget.Create(osId, "Pedro", "BBB2222");
-
-        repo.Setup(r => r.GetByOsIdAsync(osId, default)).ReturnsAsync(existing);
-
-        var handler = new OsCreatedHandler(repo.Object);
-        await handler.HandleAsync(osId, "Pedro", "BBB2222");
-
-        repo.Verify(r => r.AddAsync(It.IsAny<Budget>(), default), Times.Never);
-    }
-
     // ── OsSentForApprovalHandler ─────────────────────────────────────────────
 
     [Fact]

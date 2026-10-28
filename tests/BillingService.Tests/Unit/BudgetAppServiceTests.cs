@@ -97,16 +97,4 @@ public class BudgetAppServiceTests
         _publisher.Verify(p => p.PublishAsync(It.IsAny<DomainEvent>(), default), Times.Once);
     }
 
-    [Fact]
-    public async Task AddItemAsync_ShouldUpdateBudget()
-    {
-        var budget = Budget.Create(Guid.NewGuid(), "Ana", "DEF5678");
-        _repo.Setup(r => r.GetByIdAsync(budget.Id, default)).ReturnsAsync(budget);
-        _repo.Setup(r => r.UpdateAsync(budget, default)).Returns(Task.CompletedTask);
-
-        var result = await _sut.AddItemAsync(budget.Id, new AddBudgetItemRequest("Óleo", 80m, 1));
-
-        result.Total.Should().Be(80m);
-        result.Items.Should().ContainSingle();
-    }
 }
