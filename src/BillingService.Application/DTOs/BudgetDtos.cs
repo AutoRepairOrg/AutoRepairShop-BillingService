@@ -14,6 +14,4 @@ public record BudgetResponse(
     string? RejectionReason,
     IEnumerable<BudgetItemResponse> Items);
 
-public record AddBudgetItemRequest(string Description, decimal Price, int Quantity = 1);
-
 public record RejectBudgetRequest(string Reason);
