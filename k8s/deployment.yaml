@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: billing-service
-          image: DOCKERHUB_USERNAME/billing-service:latest
+          image: ghcr.io/autorepairorg/billing-service:latest
           ports:
             - containerPort: 8080
           env:
