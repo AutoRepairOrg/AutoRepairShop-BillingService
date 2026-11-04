@@ -77,11 +77,16 @@ jobs:
 
       - name: Login to GHCR
         if: github.ref == 'refs/heads/master'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.AUTOREPAIR_TOKEN }}
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          AUTOREPAIR_TOKEN: ${{ secrets.AUTOREPAIR_TOKEN }}
+        run: |
+          TOKEN="${GHCR_TOKEN:-$AUTOREPAIR_TOKEN}"
+          if [ -z "$TOKEN" ]; then
+            echo "Secret GHCR_TOKEN ou AUTOREPAIR_TOKEN ausente."
+            exit 1
+          fi
+          echo "$TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Push image
         if: github.ref == 'refs/heads/master'
@@ -98,6 +103,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: docker-build
     if: github.ref == 'refs/heads/master'
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_DEFAULT_REGION: us-east-1
 
     steps:
       - name: Checkout
@@ -107,27 +117,61 @@ jobs:
         uses: azure/setup-kubectl@v3
 
       - name: Configure kubeconfig
-        run: echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+        run: |
+          if ! STATUS=$(aws eks describe-cluster --name autorepair-eks --region us-east-1 --query 'cluster.status' --output text); then
+            echo "Cluster autorepair-eks inacessível. Recrie o cluster no Academy e atualize os secrets AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e AWS_SESSION_TOKEN."
+            exit 1
+          fi
+          echo "Cluster autorepair-eks: ${STATUS}"
+          aws eks update-kubeconfig --name autorepair-eks --region us-east-1
+
+      - name: Ensure GHCR pull secret
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          AUTOREPAIR_TOKEN: ${{ secrets.AUTOREPAIR_TOKEN }}
+        run: |
+          TOKEN="${GHCR_TOKEN:-$AUTOREPAIR_TOKEN}"
+          if [ -z "$TOKEN" ]; then
+            echo "Secret GHCR_TOKEN ou AUTOREPAIR_TOKEN ausente — necessário para o imagePullSecret ghcr-pull."
+            exit 1
+          fi
+          kubectl create namespace autorepair --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret docker-registry ghcr-pull \
+            --namespace autorepair \
+            --docker-server=ghcr.io \
+            --docker-username="${{ github.actor }}" \
+            --docker-password="$TOKEN" \
+            --docker-email="${{ github.actor }}@users.noreply.github.com" \
+            --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Deploy
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          kubectl apply -f k8s/deployment.yaml
           kubectl set image deployment/billing-service \
             billing-service=ghcr.io/${OWNER}/billing-service:${{ github.sha }} \
             -n autorepair
-          kubectl rollout status deployment/billing-service -n autorepair --timeout=120s
+          kubectl rollout status deployment/billing-service -n autorepair --timeout=420s
+          kubectl rollout status deployment/rabbitmq -n autorepair --timeout=180s
 
   branch-protection:
     name: Configure Branch Protection
     runs-on: ubuntu-latest
     needs: deploy
     if: github.ref == 'refs/heads/master'
+    continue-on-error: true
 
     steps:
       - name: Apply branch protection rules
         env:
-          GH_TOKEN: ${{ secrets.AUTOREPAIR_TOKEN }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          AUTOREPAIR_TOKEN: ${{ secrets.AUTOREPAIR_TOKEN }}
         run: |
+          export GH_TOKEN="${GHCR_TOKEN:-$AUTOREPAIR_TOKEN}"
+          if [ -z "$GH_TOKEN" ]; then
+            echo "Secret GHCR_TOKEN ou AUTOREPAIR_TOKEN ausente — branch protection ignorado."
+            exit 1
+          fi
           gh api \
             --method PUT \
             -H "Accept: application/vnd.github+json" \
