@@ -47,6 +47,7 @@ public class PaymentController(PaymentAppService appService) : ControllerBase
     /// Webhook Mercado Pago (público).
     /// Query: topic=payment e id (no stub: approved:{paymentId}).
     /// </summary>
+    // TODO: ao habilitar [Authorize] na API, manter este webhook anônimo (chamada do MP / stub).
     [HttpPost("webhook")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> Webhook(
