@@ -120,9 +120,6 @@ kind: Service
 metadata:
   name: billing-service
   namespace: autorepair
-  annotations:
-    service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "TCP"
-    service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "traffic-port"
 spec:
   selector:
     app: billing-service
