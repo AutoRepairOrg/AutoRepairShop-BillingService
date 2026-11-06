@@ -17,7 +17,8 @@ src/
 └── BillingService.Infrastructure → EF Core (PostgreSQL), RabbitMQ, Mercado Pago
 tests/
 └── BillingService.Tests
-    └── Unit/                     → Testes unitários (xUnit + FluentAssertions + Moq)
+    ├── Unit/                     → Testes unitários (xUnit + FluentAssertions + Moq)
+    └── BDD/                      → Cenários Gherkin da saga (Reqnroll)
 k8s/                              → Deployment, Service, HPA, ConfigMap
 .github/workflows/ci.yml          → CI/CD (Build → Testes → SonarQube → Docker → K8s)
 ```
@@ -112,6 +113,20 @@ Medição local em 5 de novembro de 2026, configuração Release, relatório Ope
 |---|---|---|
 | 40 aprovados | 280 / 332 | **84,3%** |
 
+### BDD (Gherkin)
+
+Os cenários ficam em `tests/BillingService.Tests/BDD/OrcamentoDaSaga.feature`, escritos em português (`# language: pt`). O Reqnroll (sucessor do SpecFlow) transforma cada `Cenário` em teste xUnit e liga os passos à classe `OrcamentoDaSagaSteps`. A execução é em memória: repositório e publicador de eventos são falsos, sem PostgreSQL nem RabbitMQ.
+
+| Cenário | O que confere |
+|---|---|
+| Cliente aprova o orçamento | `Draft`, depois `Approved` e `BudgetApprovedEvent` |
+| Cliente recusa o orçamento | `Rejected` e `BudgetRejectedEvent` |
+| Cancelamento da ordem desfaz o orçamento | `Cancelled` |
+
+```powershell
+dotnet test tests/BillingService.Tests/BillingService.Tests.csproj --filter FullyQualifiedName~BDD
+```
+
 ### SonarQube
 
 O job `Build, Test & Quality` analisa o código com o SonarScanner para .NET: o `begin` envolve o build, os testes geram o OpenCover e o `end` publica o resultado. A chave é `AutoRepairOrg_AutoRepairShop-BillingService`, na organização `autorepairorg`.
@@ -152,6 +167,7 @@ O painel para importar está em `observability/datadog-dashboard.json` (Dashboar
 - Mercado Pago Checkout Pro (REST API)
 - RabbitMQ (mensageria — Saga coreografado)
 - xUnit + FluentAssertions + Moq
+- Reqnroll + Gherkin (BDD)
 - Docker + Kubernetes
 - GitHub Actions (CI/CD)
 - SonarQube
