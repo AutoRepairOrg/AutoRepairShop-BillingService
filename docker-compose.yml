@@ -13,6 +13,11 @@ services:
       - MercadoPago__UseStub=true
       - MercadoPago__NotificationUrl=http://billing-service:8080/api/payment/webhook
       - ASPNETCORE_ENVIRONMENT=Development
+      - DD_SERVICE=billing-service
+      - DD_ENV=local
+      - DD_VERSION=1.0.0
+      - DD_SITE=${DD_SITE:-datadoghq.com}
+      - DD_API_KEY=${DD_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

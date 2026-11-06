@@ -1,3 +1,4 @@
+using BillingService.Api.Observability;
 using BillingService.Application.Events;
 using BillingService.Application.Interfaces;
 using BillingService.Application.Services;
@@ -6,8 +7,13 @@ using BillingService.Infrastructure.MercadoPago;
 using BillingService.Infrastructure.Messaging;
 using BillingService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog((context, _, loggerConfiguration) =>
+    DatadogObservability.Configure(loggerConfiguration, context.Configuration, "billing-service"));
+builder.Services.AddDatadog(builder.Configuration, "billing-service");
 
 // ── Database (PostgreSQL) ─────────────────────────────────────────────────────
 builder.Services.AddDbContext<BillingDbContext>(options =>
@@ -77,6 +83,8 @@ builder.Services.AddHealthChecks()
     .AddDbContextCheck<BillingDbContext>("postgresql");
 
 var app = builder.Build();
+
+app.UseDatadog();
 
 // ── Migrations automáticas ────────────────────────────────────────────────────
 using (var scope = app.Services.CreateScope())
