@@ -24,8 +24,38 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - name: Restore
         run: dotnet restore
+
+      - name: Install SonarScanner
+        run: |
+          dotnet tool install --global dotnet-sonarscanner
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+
+      - name: Begin SonarQube analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "Secret SONAR_TOKEN ausente. O scanner não publica sem ele."
+            exit 1
+          fi
+          HOST_URL="${SONAR_HOST_URL:-https://sonarcloud.io}"
+          dotnet sonarscanner begin \
+            /k:"AutoRepairOrg_AutoRepairShop-BillingService" \
+            /o:"autorepairorg" \
+            /n:"AutoRepairShop-BillingService" \
+            /d:sonar.host.url="$HOST_URL" \
+            /d:sonar.token="$SONAR_TOKEN" \
+            /d:sonar.cs.opencover.reportsPaths="coverage/**/coverage.opencover.xml" \
+            /d:sonar.dotnet.excludeTestProjects=true
 
       - name: Build
         run: dotnet build --no-restore --configuration Release
@@ -56,12 +86,10 @@ jobs:
           name: coverage-report
           path: coverage/report/
 
-      - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v3
-        continue-on-error: true
+      - name: End SonarQube analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
 
   docker-build:
     name: Docker Build
