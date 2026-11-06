@@ -19,7 +19,7 @@ public class OsSentForApprovalHandler(IBudgetRepository budgetRepository)
 {
     /// <summary>
     /// Consumido quando OsService envia a OS para aprovação, já com itens diagnosticados.
-    /// Cria o Budget (se ainda não existir) e popula os itens. Não depende de OsCreatedEvent.
+    /// Cria o Budget (se ainda não existir) e popula os itens.
     /// Idempotente: se o Budget já tiver itens, não adiciona novamente.
     /// </summary>
     public async Task HandleAsync(

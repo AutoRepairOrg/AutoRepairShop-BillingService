@@ -24,8 +24,38 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - name: Restore
         run: dotnet restore
+
+      - name: Install SonarScanner
+        run: |
+          dotnet tool install --global dotnet-sonarscanner
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+
+      - name: Begin SonarQube analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "Secret SONAR_TOKEN ausente. O scanner não publica sem ele."
+            exit 1
+          fi
+          HOST_URL="${SONAR_HOST_URL:-https://sonarcloud.io}"
+          dotnet sonarscanner begin \
+            /k:"AutoRepairOrg_AutoRepairShop-BillingService" \
+            /o:"autorepairorg" \
+            /n:"AutoRepairShop-BillingService" \
+            /d:sonar.host.url="$HOST_URL" \
+            /d:sonar.token="$SONAR_TOKEN" \
+            /d:sonar.cs.opencover.reportsPaths="coverage/**/coverage.opencover.xml" \
+            /d:sonar.dotnet.excludeTestProjects=true
 
       - name: Build
         run: dotnet build --no-restore --configuration Release
@@ -56,12 +86,10 @@ jobs:
           name: coverage-report
           path: coverage/report/
 
-      - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v3
-        continue-on-error: true
+      - name: End SonarQube analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
 
   docker-build:
     name: Docker Build
@@ -157,13 +185,10 @@ jobs:
   branch-protection:
     name: Configure Branch Protection
     runs-on: ubuntu-latest
-    # LAB: corre em qualquer push (não depende do deploy) para tirar a proteção
-    # já aplicada em master. Antes da entrega, voltar a needs: deploy e ao PUT comentado.
-    if: github.event_name == 'push'
-    continue-on-error: true
+    needs: deploy
 
     steps:
-      - name: Clear branch protection (lab)
+      - name: Apply branch protection
         env:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           AUTOREPAIR_TOKEN: ${{ secrets.AUTOREPAIR_TOKEN }}
@@ -173,34 +198,26 @@ jobs:
             echo "Secret GHCR_TOKEN ou AUTOREPAIR_TOKEN ausente — branch protection não alterada."
             exit 1
           fi
-          # Remove required status checks + required review para push direto em master.
           gh api \
-            --method DELETE \
+            --method PUT \
             -H "Accept: application/vnd.github+json" \
             /repos/${{ github.repository }}/branches/master/protection \
-            || echo "Sem proteção ativa ou sem permissão — seguindo."
-
-          # Reativar na entrega final:
-          # gh api \
-          #   --method PUT \
-          #   -H "Accept: application/vnd.github+json" \
-          #   /repos/${{ github.repository }}/branches/master/protection \
-          #   --input - <<EOF
-          # {
-          #   "required_status_checks": {
-          #     "strict": true,
-          #     "contexts": [
-          #       "Build, Test & Quality",
-          #       "Docker Build"
-          #     ]
-          #   },
-          #   "enforce_admins": true,
-          #   "required_pull_request_reviews": {
-          #     "required_approving_review_count": 1,
-          #     "dismiss_stale_reviews": true
-          #   },
-          #   "restrictions": null,
-          #   "allow_force_pushes": false,
-          #   "allow_deletions": false
-          # }
-          # EOF
+            --input - <<EOF
+          {
+            "required_status_checks": {
+              "strict": true,
+              "contexts": [
+                "Build, Test & Quality",
+                "Docker Build"
+              ]
+            },
+            "enforce_admins": true,
+            "required_pull_request_reviews": {
+              "required_approving_review_count": 1,
+              "dismiss_stale_reviews": true
+            },
+            "restrictions": null,
+            "allow_force_pushes": false,
+            "allow_deletions": false
+          }
+          EOF

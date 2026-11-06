@@ -5,6 +5,10 @@ Parte da arquitetura distribuída do **Tech Challenge Fase 4 · 12SOAT**.
 
 ## Arquitetura
 
+![Arquitetura da saga](docs/arquitetura.png)
+
+Os três serviços ficam no namespace `autorepair`. Cada API tem LoadBalancer e Swagger. O RabbitMQ continua `ClusterIP`: os pods publicam e consomem na porta 5672.
+
 ```
 src/
 ├── BillingService.Api            → Controllers REST, Swagger, Program.cs
@@ -100,7 +104,21 @@ dotnet test
 dotnet test --collect:"XPlat Code Coverage"
 ```
 
-Cobertura mínima exigida: **80%**
+Cobertura mínima exigida pelo pipeline: **80%** de linhas. Abaixo disso o job `Build, Test & Quality` falha.
+
+Medição local em 5 de novembro de 2026, configuração Release, relatório OpenCover do Coverlet:
+
+| Testes | Linhas cobertas | Cobertura de linhas |
+|---|---|---|
+| 40 aprovados | 280 / 332 | **84,3%** |
+
+### SonarQube
+
+O job `Build, Test & Quality` analisa o código com o SonarScanner para .NET: o `begin` envolve o build, os testes geram o OpenCover e o `end` publica o resultado. A chave é `AutoRepairOrg_AutoRepairShop-BillingService`, na organização `autorepairorg`.
+
+Painel: [sonarcloud.io/summary/overall?id=AutoRepairOrg_AutoRepairShop-BillingService](https://sonarcloud.io/summary/overall?id=AutoRepairOrg_AutoRepairShop-BillingService)
+
+O repositório precisa do secret `SONAR_TOKEN` (e, se quiser outro host, `SONAR_HOST_URL`). Sem o token o job para antes do build. O Quality Gate desse projeto passa a existir no primeiro push em que o scanner termina.
 
 ## Tech Stack
 
